@@ -200,15 +200,31 @@ export const useAppConfig = createPersistStore(
     merge(persistedState, currentState) {
       const state = persistedState as ChatConfig | undefined;
       if (!state) return { ...currentState };
-      const models = currentState.models.slice();
-      state.models.forEach((pModel) => {
-        const idx = models.findIndex(
-          (v) => v.name === pModel.name && v.provider === pModel.provider,
-        );
-        if (idx !== -1) models[idx] = pModel;
-        else models.push(pModel);
+
+      // 创建一个模型映射，用于快速查找
+      const modelMap: Record<string, LLMModel> = {};
+
+      // 首先添加当前状态中的所有模型
+      currentState.models.forEach((model) => {
+        const key = `${model.name}@${model.provider?.providerName}`;
+        modelMap[key] = { ...model, available: false }; // 默认标记为不可用
       });
-      return { ...currentState, ...state, models: models };
+
+      // 然后用持久化状态中的模型更新或添加
+      state.models.forEach((model) => {
+        const key = `${model.name}@${model.provider?.providerName}`;
+        // 如果模型已存在，更新它；否则添加它
+        modelMap[key] = { ...model };
+      });
+
+      // 将映射转换回数组
+      const mergedModels = Object.values(modelMap);
+
+      return {
+        ...currentState,
+        ...state,
+        models: mergedModels,
+      };
     },
 
     migrate(persistedState, version) {

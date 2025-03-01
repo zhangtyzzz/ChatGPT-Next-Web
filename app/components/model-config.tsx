@@ -116,7 +116,7 @@ export function ModelConfigList(props: {
       v.provider?.providerName === props.modelConfig.providerName,
   );
 
-  // 如果没有找到当前服务商的模型，显示所有模型（防止下拉列表为空）
+  // 如果没有找到当前服务商的模型，显示所有可用模型（防止下拉列表为空）
   const modelsToShow =
     filteredModels.length > 0
       ? filteredModels
@@ -242,8 +242,13 @@ export function ModelConfigList(props: {
               (m) => m.provider?.providerName !== provider,
             );
 
-            // 将新模型添加到过滤后的列表
-            const updatedModels = [...filteredModels, ...models];
+            // 将新模型添加到过滤后的列表，并确保标记为可用
+            const updatedModels = [
+              ...filteredModels,
+              ...models.map((m) => ({ ...m, available: true })),
+            ];
+
+            // 更新应用配置
             appConfig.update((config) => {
               config.models = updatedModels;
             });
