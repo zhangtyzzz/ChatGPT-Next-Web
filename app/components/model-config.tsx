@@ -95,7 +95,7 @@ export function ModelConfigList(props: {
       case ServiceProvider.SiliconFlow:
         return accessStore.isValidSiliconFlow();
       case ServiceProvider.Stability:
-        return true; // 假设不需要验证或其他处理
+        return accessStore.isValidStability();
       default:
         return false;
     }

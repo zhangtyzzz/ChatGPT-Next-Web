@@ -721,7 +721,7 @@ export function ChatActions(props: {
                   case ServiceProvider.SiliconFlow:
                     return accessStore.isValidSiliconFlow();
                   case ServiceProvider.Stability:
-                    return true; // 假设不需要验证
+                    return accessStore.isValidStability(); // 假设不需要验证
                   default:
                     return false;
                 }
