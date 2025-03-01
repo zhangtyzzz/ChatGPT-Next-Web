@@ -1,14 +1,14 @@
-import { ServiceProvider } from "@/app/constant";
+import { ServiceProvider, OpenaiPath, SiliconFlow } from "@/app/constant";
 import { ModalConfigValidator, ModelConfig } from "../store";
-import { useAccessStore } from "../store";
+import { useAccessStore, useAppConfig } from "../store";
 
 import Locale from "../locales";
 import { InputRange } from "./input-range";
-import { ListItem, Select } from "./ui-lib";
+import { ListItem, Select, showToast, showModal } from "./ui-lib";
 import { useAllModels } from "../utils/hooks";
 import styles from "./model-config.module.scss";
 import { getModelProvider } from "../utils/model";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 export function ModelConfigList(props: {
   modelConfig: ModelConfig;
@@ -16,6 +16,8 @@ export function ModelConfigList(props: {
 }) {
   const allModels = useAllModels();
   const accessStore = useAccessStore();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const appConfig = useAppConfig();
 
   // 确保初始化时providerName和模型匹配
   useEffect(() => {
@@ -115,6 +117,154 @@ export function ModelConfigList(props: {
   const value = `${props.modelConfig.model}@${props.modelConfig?.providerName}`;
   const compressModelValue = `${props.modelConfig.compressModel}@${props.modelConfig?.compressProviderName}`;
 
+  // 从当前服务商获取可用模型列表
+  const refreshModels = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      // 获取当前服务商
+      const provider = props.modelConfig.providerName;
+
+      // 获取对应服务商的API密钥和路径信息
+      let apiKey = "";
+      let baseUrl = "";
+      let listModelPath = "";
+
+      switch (provider) {
+        case ServiceProvider.OpenAI:
+          apiKey = accessStore.openaiApiKey;
+          baseUrl = accessStore.openaiUrl;
+          listModelPath = OpenaiPath.ListModelPath;
+          break;
+        case ServiceProvider.SiliconFlow:
+          apiKey = accessStore.siliconflowApiKey;
+          baseUrl = accessStore.siliconflowUrl;
+          listModelPath = SiliconFlow.ListModelPath;
+          break;
+        // 如果需要为其他服务商添加支持，可以在这里继续添加
+        default:
+          showToast(`暂不支持${provider}的模型列表获取`);
+          setIsRefreshing(false);
+          return;
+      }
+
+      // 检查是否有API密钥
+      if (!apiKey) {
+        showToast(`请先配置${provider} API密钥`);
+        setIsRefreshing(false);
+        return;
+      }
+
+      // 检查是否有模型列表路径
+      if (!listModelPath) {
+        showToast(`暂不支持${provider}的模型列表获取`);
+        setIsRefreshing(false);
+        return;
+      }
+
+      // 构建请求URL和头信息
+      const endpoint = `${baseUrl}/${listModelPath}`;
+      const headers = {
+        Authorization: `Bearer ${apiKey}`,
+      };
+
+      console.log(`正在从 ${endpoint} 获取模型列表...`);
+      const response = await fetch(endpoint, { headers });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      let models = [];
+
+      // 统一处理返回的模型数据，不做过滤
+      if (provider === ServiceProvider.OpenAI) {
+        models = data.data.map((m: any, index: number) => ({
+          name: m.id,
+          displayName: m.id,
+          available: true,
+          sorted: 1000 + index,
+          provider: {
+            id: "openai",
+            providerName: "OpenAI",
+            providerType: "openai",
+            sorted: 1,
+          },
+        }));
+      } else if (provider === ServiceProvider.SiliconFlow) {
+        models = data.data.map((m: any, index: number) => ({
+          name: m.id,
+          displayName: m.id,
+          available: true,
+          sorted: 1000 + index,
+          provider: {
+            id: "siliconflow",
+            providerName: "SiliconFlow",
+            providerType: "custom",
+            sorted: 1,
+          },
+        }));
+      }
+
+      if (!models || models.length === 0) {
+        showToast("未获取到可用模型");
+        setIsRefreshing(false);
+        return;
+      }
+
+      showConfirmDialog(models, provider);
+    } catch (error) {
+      console.error("刷新模型列表失败", error);
+      showToast("刷新模型列表失败");
+      setIsRefreshing(false);
+    }
+  }, [props.modelConfig.providerName, accessStore, appConfig, props]);
+
+  // 显示确认对话框
+  const showConfirmDialog = (models: any[], provider: ServiceProvider) => {
+    showModal({
+      title: "刷新模型列表",
+      children: `获取到 ${models.length} 个模型，是否更新${provider}的模型列表？`,
+      actions: [
+        <button key="cancel" onClick={() => setIsRefreshing(false)}>
+          取消
+        </button>,
+        <button
+          key="confirm"
+          onClick={() => {
+            // 清除当前服务商的模型
+            const filteredModels = appConfig.models.filter(
+              (m) => m.provider?.providerName !== provider,
+            );
+
+            // 将新模型添加到过滤后的列表
+            const updatedModels = [...filteredModels, ...models];
+            appConfig.update((config) => {
+              config.models = updatedModels;
+            });
+
+            // 如果当前选择的模型不在新列表中，自动选择第一个可用模型
+            const currentModel = props.modelConfig.model;
+            const isCurrentModelInNewList = models.some(
+              (m) => m.name === currentModel,
+            );
+
+            if (!isCurrentModelInNewList && models.length > 0) {
+              props.updateConfig((config) => {
+                config.model = ModalConfigValidator.model(models[0].name);
+              });
+            }
+
+            setIsRefreshing(false);
+            showToast(`已更新${provider}的模型列表，共${models.length}个模型`);
+          }}
+        >
+          确认
+        </button>,
+      ],
+    });
+  };
+
   return (
     <>
       <ListItem title={Locale.Settings.Access.Provider.Title}>
@@ -145,29 +295,39 @@ export function ModelConfigList(props: {
       </ListItem>
 
       <ListItem title={Locale.Settings.Model}>
-        <Select
-          aria-label={Locale.Settings.Model}
-          value={value}
-          align="left"
-          onChange={(e) => {
-            const [model, providerName] = getModelProvider(
-              e.currentTarget.value,
-            );
-            props.updateConfig((config) => {
-              config.model = ModalConfigValidator.model(model);
-              config.providerName = providerName as ServiceProvider;
-            });
-          }}
-        >
-          {modelsToShow.map((v, i) => (
-            <option value={`${v.name}@${v.provider?.providerName}`} key={i}>
-              {v.displayName}
-              {filteredModels.length === 0
-                ? ` (${v.provider?.providerName})`
-                : ""}
-            </option>
-          ))}
-        </Select>
+        <div className={styles["model-selector-container"]}>
+          <button
+            className={styles["refresh-models-button"]}
+            onClick={refreshModels}
+            disabled={isRefreshing}
+            title="刷新模型列表"
+          >
+            {isRefreshing ? "⟳" : "↻"}
+          </button>
+          <Select
+            aria-label={Locale.Settings.Model}
+            value={value}
+            align="left"
+            onChange={(e) => {
+              const [model, providerName] = getModelProvider(
+                e.currentTarget.value,
+              );
+              props.updateConfig((config) => {
+                config.model = ModalConfigValidator.model(model);
+                config.providerName = providerName as ServiceProvider;
+              });
+            }}
+          >
+            {modelsToShow.map((v, i) => (
+              <option value={`${v.name}@${v.provider?.providerName}`} key={i}>
+                {v.displayName}
+                {filteredModels.length === 0
+                  ? ` (${v.provider?.providerName})`
+                  : ""}
+              </option>
+            ))}
+          </Select>
+        </div>
       </ListItem>
       <ListItem
         title={Locale.Settings.Temperature.Title}
@@ -397,7 +557,6 @@ export function ModelConfigList(props: {
         subTitle={Locale.Settings.CompressModel.SubTitle}
       >
         <Select
-          className={styles["select-compress-model"]}
           aria-label={Locale.Settings.CompressModel.Title}
           value={compressModelValue}
           onChange={(e) => {
