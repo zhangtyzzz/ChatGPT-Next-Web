@@ -1,4 +1,9 @@
-import { ServiceProvider, OpenaiPath, SiliconFlow } from "@/app/constant";
+import {
+  ServiceProvider,
+  OpenaiPath,
+  SiliconFlow,
+  OPENAI_BASE_URL,
+} from "@/app/constant";
 import { ModalConfigValidator, ModelConfig } from "../store";
 import { useAccessStore, useAppConfig } from "../store";
 
@@ -9,6 +14,9 @@ import { useAllModels } from "../utils/hooks";
 import styles from "./model-config.module.scss";
 import { getModelProvider } from "../utils/model";
 import { useEffect, useState, useCallback } from "react";
+import { getHeaders } from "../client/api";
+import { getClientConfig } from "../config/client";
+import { ApiPath } from "@/app/constant";
 
 export function ModelConfigList(props: {
   modelConfig: ModelConfig;
@@ -124,19 +132,16 @@ export function ModelConfigList(props: {
       // 获取当前服务商
       const provider = props.modelConfig.providerName;
 
-      // 获取对应服务商的API密钥和路径信息
-      let apiKey = "";
+      // 获取API路径和模型列表路径
       let baseUrl = "";
       let listModelPath = "";
 
       switch (provider) {
         case ServiceProvider.OpenAI:
-          apiKey = accessStore.openaiApiKey;
           baseUrl = accessStore.openaiUrl;
           listModelPath = OpenaiPath.ListModelPath;
           break;
         case ServiceProvider.SiliconFlow:
-          apiKey = accessStore.siliconflowApiKey;
           baseUrl = accessStore.siliconflowUrl;
           listModelPath = SiliconFlow.ListModelPath;
           break;
@@ -147,28 +152,28 @@ export function ModelConfigList(props: {
           return;
       }
 
-      // 检查是否有API密钥
-      if (!apiKey) {
-        showToast(`请先配置${provider} API密钥`);
-        setIsRefreshing(false);
-        return;
+      // 与聊天功能使用相同的方式构建API路径
+      if (baseUrl.length === 0) {
+        const isApp = !!getClientConfig()?.isApp;
+        const apiPath = ApiPath.OpenAI;
+        baseUrl = isApp ? OPENAI_BASE_URL : apiPath;
       }
 
-      // 检查是否有模型列表路径
-      if (!listModelPath) {
-        showToast(`暂不支持${provider}的模型列表获取`);
-        setIsRefreshing(false);
-        return;
+      if (baseUrl.endsWith("/")) {
+        baseUrl = baseUrl.slice(0, baseUrl.length - 1);
       }
 
-      // 构建请求URL和头信息
+      if (!baseUrl.startsWith("http") && !baseUrl.startsWith(ApiPath.OpenAI)) {
+        baseUrl = "https://" + baseUrl;
+      }
+
       const endpoint = `${baseUrl}/${listModelPath}`;
-      const headers = {
-        Authorization: `Bearer ${apiKey}`,
-      };
-
       console.log(`正在从 ${endpoint} 获取模型列表...`);
-      const response = await fetch(endpoint, { headers });
+
+      // 直接使用getHeaders()函数获取包含认证信息的头部
+      const response = await fetch(endpoint, {
+        headers: getHeaders(),
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -177,7 +182,7 @@ export function ModelConfigList(props: {
       const data = await response.json();
       let models = [];
 
-      // 统一处理返回的模型数据，不做过滤
+      // 统一处理返回的模型数据
       if (provider === ServiceProvider.OpenAI) {
         models = data.data.map((m: any, index: number) => ({
           name: m.id,
