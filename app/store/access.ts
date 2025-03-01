@@ -219,6 +219,10 @@ export const useAccessStore = createPersistStore(
       return ensure(get(), ["siliconflowApiKey"]);
     },
 
+    isValidStability() {
+      return ensure(get(), ["stabilityApiKey"]);
+    },
+
     isAuthorized() {
       this.fetch();
 
@@ -238,6 +242,7 @@ export const useAccessStore = createPersistStore(
         this.isValidXAI() ||
         this.isValidChatGLM() ||
         this.isValidSiliconFlow() ||
+        this.isValidStability() ||
         !this.enabledAccessControl() ||
         (this.enabledAccessControl() && ensure(get(), ["accessCode"]))
       );
