@@ -192,52 +192,90 @@ export function ModelConfigList(props: {
 
   // 显示确认对话框
   const showConfirmDialog = (models: any[], provider: ServiceProvider) => {
+    let modalRoot: HTMLElement | null = null;
+
+    const onConfirm = () => {
+      // 清除当前服务商的模型
+      const filteredModels = appConfig.models.filter(
+        (m) => m.provider?.providerName !== provider,
+      );
+
+      // 将新模型添加到过滤后的列表，并确保标记为可用
+      const updatedModels = [
+        ...filteredModels,
+        ...models.map((m) => ({ ...m, available: true })),
+      ];
+
+      // 更新应用配置
+      appConfig.update((config) => {
+        config.models = updatedModels;
+      });
+
+      // 如果当前选择的模型不在新列表中，自动选择第一个可用模型
+      const currentModel = props.modelConfig.model;
+      const isCurrentModelInNewList = models.some(
+        (m) => m.name === currentModel,
+      );
+
+      if (!isCurrentModelInNewList && models.length > 0) {
+        props.updateConfig((config) => {
+          config.model = ModalConfigValidator.model(models[0].name);
+        });
+      }
+
+      setIsRefreshing(false);
+      showToast(`已更新${provider}的模型列表，共${models.length}个模型`);
+
+      // 关闭弹窗 - 通过触发模态窗口的点击事件
+      setTimeout(() => {
+        const modalMask = document.querySelector(".modal-mask");
+        if (modalMask) {
+          const event = new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+          });
+          modalMask.dispatchEvent(event);
+        }
+      }, 0);
+    };
+
     showModal({
       title: "刷新模型列表",
       children: `获取到 ${models.length} 个模型，是否更新${provider}的模型列表？`,
+      onClose: () => {
+        setIsRefreshing(false);
+      },
       actions: [
-        <button key="cancel" onClick={() => setIsRefreshing(false)}>
-          取消
-        </button>,
         <button
-          key="confirm"
+          key="cancel"
           onClick={() => {
-            // 清除当前服务商的模型
-            const filteredModels = appConfig.models.filter(
-              (m) => m.provider?.providerName !== provider,
-            );
-
-            // 将新模型添加到过滤后的列表，并确保标记为可用
-            const updatedModels = [
-              ...filteredModels,
-              ...models.map((m) => ({ ...m, available: true })),
-            ];
-
-            // 更新应用配置
-            appConfig.update((config) => {
-              config.models = updatedModels;
-            });
-
-            // 如果当前选择的模型不在新列表中，自动选择第一个可用模型
-            const currentModel = props.modelConfig.model;
-            const isCurrentModelInNewList = models.some(
-              (m) => m.name === currentModel,
-            );
-
-            if (!isCurrentModelInNewList && models.length > 0) {
-              props.updateConfig((config) => {
-                config.model = ModalConfigValidator.model(models[0].name);
-              });
-            }
-
             setIsRefreshing(false);
-            showToast(`已更新${provider}的模型列表，共${models.length}个模型`);
+
+            // 关闭弹窗 - 通过触发模态窗口的点击事件
+            setTimeout(() => {
+              const modalMask = document.querySelector(".modal-mask");
+              if (modalMask) {
+                const event = new MouseEvent("click", {
+                  bubbles: true,
+                  cancelable: true,
+                  view: window,
+                });
+                modalMask.dispatchEvent(event);
+              }
+            }, 0);
           }}
         >
+          取消
+        </button>,
+        <button key="confirm" onClick={onConfirm}>
           确认
         </button>,
       ],
     });
+
+    // 保存模态窗口引用
+    modalRoot = document.querySelector(".modal-mask");
   };
 
   return (
