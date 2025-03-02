@@ -284,6 +284,7 @@ export function ModelConfigList(props: {
         <Select
           aria-label={Locale.Settings.Access.Provider.Title}
           value={props.modelConfig.providerName}
+          align="center"
           onChange={(e) => {
             const provider = e.currentTarget.value as ServiceProvider;
             props.updateConfig((config) => {
@@ -320,7 +321,7 @@ export function ModelConfigList(props: {
           <Select
             aria-label={Locale.Settings.Model}
             value={value}
-            align="left"
+            align="center"
             onChange={(e) => {
               const [model, providerName] = getModelProvider(
                 e.currentTarget.value,
@@ -540,6 +541,7 @@ export function ModelConfigList(props: {
           value={
             props.modelConfig.compressProviderName || ServiceProvider.OpenAI
           }
+          align="center"
           onChange={(e) => {
             const provider = e.currentTarget.value as ServiceProvider;
             props.updateConfig((config) => {
@@ -572,6 +574,7 @@ export function ModelConfigList(props: {
         <Select
           aria-label={Locale.Settings.CompressModel.Title}
           value={compressModelValue}
+          align="center"
           onChange={(e) => {
             const [model, providerName] = getModelProvider(
               e.currentTarget.value,

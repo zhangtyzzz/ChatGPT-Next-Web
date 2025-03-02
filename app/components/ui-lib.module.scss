@@ -258,6 +258,12 @@
     }
   }
 
+  &:not(.left-align-option) {
+    option {
+      text-align: center;
+    }
+  }
+
   .select-with-icon-select {
     height: 100%;
     border: var(--border-in-light);
