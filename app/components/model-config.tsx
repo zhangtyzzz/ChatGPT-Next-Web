@@ -72,42 +72,7 @@ export function ModelConfigList(props: {
   }, [props.modelConfig.providerName, props.modelConfig.model, allModels]);
 
   // 过滤未配置API密钥的服务提供商
-  const validProviders = Object.entries(ServiceProvider).filter(([_, v]) => {
-    switch (v) {
-      case ServiceProvider.OpenAI:
-        return true; // 始终保留OpenAI选项，即使没有配置API密钥
-      case ServiceProvider.Azure:
-        return accessStore.isValidAzure();
-      case ServiceProvider.Google:
-        return accessStore.isValidGoogle();
-      case ServiceProvider.Anthropic:
-        return accessStore.isValidAnthropic();
-      case ServiceProvider.Baidu:
-        return accessStore.isValidBaidu();
-      case ServiceProvider.ByteDance:
-        return accessStore.isValidByteDance();
-      case ServiceProvider.Alibaba:
-        return accessStore.isValidAlibaba();
-      case ServiceProvider.Tencent:
-        return accessStore.isValidTencent();
-      case ServiceProvider.Moonshot:
-        return accessStore.isValidMoonshot();
-      case ServiceProvider.Iflytek:
-        return accessStore.isValidIflytek();
-      case ServiceProvider.DeepSeek:
-        return accessStore.isValidDeepSeek();
-      case ServiceProvider.XAI:
-        return accessStore.isValidXAI();
-      case ServiceProvider.ChatGLM:
-        return accessStore.isValidChatGLM();
-      case ServiceProvider.SiliconFlow:
-        return accessStore.isValidSiliconFlow();
-      case ServiceProvider.Stability:
-        return accessStore.isValidStability();
-      default:
-        return false;
-    }
-  });
+  const validProviders = Object.entries(ServiceProvider);
 
   // 确保有可用的模型供当前服务商使用
   const filteredModels = allModels.filter(
@@ -227,52 +192,90 @@ export function ModelConfigList(props: {
 
   // 显示确认对话框
   const showConfirmDialog = (models: any[], provider: ServiceProvider) => {
+    let modalRoot: HTMLElement | null = null;
+
+    const onConfirm = () => {
+      // 清除当前服务商的模型
+      const filteredModels = appConfig.models.filter(
+        (m) => m.provider?.providerName !== provider,
+      );
+
+      // 将新模型添加到过滤后的列表，并确保标记为可用
+      const updatedModels = [
+        ...filteredModels,
+        ...models.map((m) => ({ ...m, available: true })),
+      ];
+
+      // 更新应用配置
+      appConfig.update((config) => {
+        config.models = updatedModels;
+      });
+
+      // 如果当前选择的模型不在新列表中，自动选择第一个可用模型
+      const currentModel = props.modelConfig.model;
+      const isCurrentModelInNewList = models.some(
+        (m) => m.name === currentModel,
+      );
+
+      if (!isCurrentModelInNewList && models.length > 0) {
+        props.updateConfig((config) => {
+          config.model = ModalConfigValidator.model(models[0].name);
+        });
+      }
+
+      setIsRefreshing(false);
+      showToast(`已更新${provider}的模型列表，共${models.length}个模型`);
+
+      // 关闭弹窗 - 通过触发模态窗口的点击事件
+      setTimeout(() => {
+        const modalMask = document.querySelector(".modal-mask");
+        if (modalMask) {
+          const event = new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+          });
+          modalMask.dispatchEvent(event);
+        }
+      }, 0);
+    };
+
     showModal({
       title: "刷新模型列表",
       children: `获取到 ${models.length} 个模型，是否更新${provider}的模型列表？`,
+      onClose: () => {
+        setIsRefreshing(false);
+      },
       actions: [
-        <button key="cancel" onClick={() => setIsRefreshing(false)}>
-          取消
-        </button>,
         <button
-          key="confirm"
+          key="cancel"
           onClick={() => {
-            // 清除当前服务商的模型
-            const filteredModels = appConfig.models.filter(
-              (m) => m.provider?.providerName !== provider,
-            );
-
-            // 将新模型添加到过滤后的列表，并确保标记为可用
-            const updatedModels = [
-              ...filteredModels,
-              ...models.map((m) => ({ ...m, available: true })),
-            ];
-
-            // 更新应用配置
-            appConfig.update((config) => {
-              config.models = updatedModels;
-            });
-
-            // 如果当前选择的模型不在新列表中，自动选择第一个可用模型
-            const currentModel = props.modelConfig.model;
-            const isCurrentModelInNewList = models.some(
-              (m) => m.name === currentModel,
-            );
-
-            if (!isCurrentModelInNewList && models.length > 0) {
-              props.updateConfig((config) => {
-                config.model = ModalConfigValidator.model(models[0].name);
-              });
-            }
-
             setIsRefreshing(false);
-            showToast(`已更新${provider}的模型列表，共${models.length}个模型`);
+
+            // 关闭弹窗 - 通过触发模态窗口的点击事件
+            setTimeout(() => {
+              const modalMask = document.querySelector(".modal-mask");
+              if (modalMask) {
+                const event = new MouseEvent("click", {
+                  bubbles: true,
+                  cancelable: true,
+                  view: window,
+                });
+                modalMask.dispatchEvent(event);
+              }
+            }, 0);
           }}
         >
+          取消
+        </button>,
+        <button key="confirm" onClick={onConfirm}>
           确认
         </button>,
       ],
     });
+
+    // 保存模态窗口引用
+    modalRoot = document.querySelector(".modal-mask");
   };
 
   return (
@@ -281,6 +284,7 @@ export function ModelConfigList(props: {
         <Select
           aria-label={Locale.Settings.Access.Provider.Title}
           value={props.modelConfig.providerName}
+          align="center"
           onChange={(e) => {
             const provider = e.currentTarget.value as ServiceProvider;
             props.updateConfig((config) => {
@@ -317,7 +321,7 @@ export function ModelConfigList(props: {
           <Select
             aria-label={Locale.Settings.Model}
             value={value}
-            align="left"
+            align="center"
             onChange={(e) => {
               const [model, providerName] = getModelProvider(
                 e.currentTarget.value,
@@ -537,6 +541,7 @@ export function ModelConfigList(props: {
           value={
             props.modelConfig.compressProviderName || ServiceProvider.OpenAI
           }
+          align="center"
           onChange={(e) => {
             const provider = e.currentTarget.value as ServiceProvider;
             props.updateConfig((config) => {
@@ -569,6 +574,7 @@ export function ModelConfigList(props: {
         <Select
           aria-label={Locale.Settings.CompressModel.Title}
           value={compressModelValue}
+          align="center"
           onChange={(e) => {
             const [model, providerName] = getModelProvider(
               e.currentTarget.value,
